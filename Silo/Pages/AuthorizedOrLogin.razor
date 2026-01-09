@@ -1,18 +1,28 @@
-﻿<AuthorizeView>
-    <Authorized>
-        @ChildContent
-    </Authorized>
-    <NotAuthorized>
-        <MudText Typo="Typo.body1">
-            You're not logged in. To view this page, log in.
-        </MudText>
-        <MudButton EndIcon="@Icons.Filled.Login"
-            Color="Color.Primary" 
-            Href="Identity/Account/Login">
-            Log In
-        </MudButton>
-    </NotAuthorized>
-</AuthorizeView>
+﻿@inject IConfiguration Configuration
+
+@if (Configuration.GetValue<bool>("EnableAuthentication", true))
+{
+    <AuthorizeView>
+        <Authorized>
+            @ChildContent
+        </Authorized>
+        <NotAuthorized>
+            <MudText Typo="Typo.body1">
+                You're not logged in. To view this page, log in.
+            </MudText>
+            <MudButton EndIcon="@Icons.Filled.Login"
+                Color="Color.Primary" 
+                Href="Identity/Account/Login">
+                Log In
+            </MudButton>
+        </NotAuthorized>
+    </AuthorizeView>
+}
+else
+{
+    @* In development mode without authentication, always show content *@
+    @ChildContent
+}
 
 @code {
     [Parameter, EditorRequired]
