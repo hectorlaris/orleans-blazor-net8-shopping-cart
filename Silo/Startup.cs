@@ -11,42 +11,58 @@ namespace Orleans.ShoppingCart.Silo;
 public sealed class Startup
 {
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
 
-    public Startup(IConfiguration configuration)
+    public Startup(IConfiguration configuration, IWebHostEnvironment environment)
     {
         _configuration = configuration;
+        _environment = environment;
     }
 
     public void ConfigureServices(IServiceCollection services)
     {
         services.AddMudServices();
 
-        services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-                .AddMicrosoftIdentityWebApp(
-            options =>
-            {
-                _configuration.Bind("AzureAdB2C", options);
+        // Only add authentication if not in development or if explicitly configured
+        var enableAuth = !_environment.IsDevelopment() || 
+                        _configuration.GetValue<bool>("EnableAuthentication", false);
 
-                static void ConfigCookies(params CookieBuilder[] cookies)
+        if (enableAuth)
+        {
+            services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
+                    .AddMicrosoftIdentityWebApp(
+                options =>
                 {
-                    foreach (var cookie in cookies)
+                    _configuration.Bind("AzureAdB2C", options);
+
+                    static void ConfigCookies(params CookieBuilder[] cookies)
                     {
-                        cookie.SameSite = SameSiteMode.None;
-                        cookie.SecurePolicy = CookieSecurePolicy.Always;
-                        cookie.IsEssential = true;
+                        foreach (var cookie in cookies)
+                        {
+                            cookie.SameSite = SameSiteMode.None;
+                            cookie.SecurePolicy = CookieSecurePolicy.Always;
+                            cookie.IsEssential = true;
+                        }
                     }
-                }
 
-                ConfigCookies(options.NonceCookie, options.CorrelationCookie);
-            },
-            subscribeToOpenIdConnectMiddlewareDiagnosticsEvents: true);
+                    ConfigCookies(options.NonceCookie, options.CorrelationCookie);
+                },
+                subscribeToOpenIdConnectMiddlewareDiagnosticsEvents: true);
 
-        services.AddControllersWithViews()
-            .AddMicrosoftIdentityUI();
+            services.AddControllersWithViews()
+                .AddMicrosoftIdentityUI();
+        }
+        else
+        {
+            // Add minimal authentication for development
+            services.AddAuthentication("Cookies")
+                .AddCookie("Cookies");
+            
+            services.AddControllersWithViews();
+        }
 
         services.AddRazorPages();
-        services.AddServerSideBlazor()
-            .AddMicrosoftIdentityConsentHandler();
+        services.AddServerSideBlazor();
 
         services.AddHttpContextAccessor();
         services.AddSingleton<ShoppingCartService>();
@@ -71,15 +87,22 @@ public sealed class Startup
             app.UseHsts();
         }
 
-        app.UseRewriter(new RewriteOptions().Add(context =>
+        var enableAuth = !env.IsDevelopment() || 
+                        _configuration.GetValue<bool>("EnableAuthentication", false);
+
+        if (enableAuth)
         {
-            if (context.HttpContext.Request.Path == "/MicrosoftIdentity/Account/SignedOut")
+            app.UseRewriter(new RewriteOptions().Add(context =>
             {
-                var host = context.HttpContext.Request.Host;
-                var url = $"{context.HttpContext.Request.Scheme}://{host}";
-                context.HttpContext.Response.Redirect(url);
-            }
-        }));
+                if (context.HttpContext.Request.Path == "/MicrosoftIdentity/Account/SignedOut")
+                {
+                    var host = context.HttpContext.Request.Host;
+                    var url = $"{context.HttpContext.Request.Scheme}://{host}";
+                    context.HttpContext.Response.Redirect(url);
+                }
+            }));
+        }
+
         app.UseHttpsRedirection();
         app.UseStaticFiles();
         app.UseRouting();
